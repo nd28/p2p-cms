@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>P2P CMS</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { width: 420px; height: 580px; overflow: hidden; }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .error {
+      display: none;
+      padding: 24px 16px;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #856404;
+      background: #fff3cd;
+      height: 100%;
+    }
+    .error.show { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .error h3 { margin-bottom: 8px; color: #664d03; }
+    .error code {
+      display: block;
+      background: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #495057;
+      border: 1px solid #e9ecef;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="cms-frame" src="http://127.0.0.1:41235/" allow="clipboard-read; clipboard-write"></iframe>
+  <div id="error" class="error">
+    <h3>Server not running</h3>
+    <p>Start the companion server first:</p>
+    <code>cd p2p-cms && npm run server</code>
+  </div>
+  <script>
+    const frame = document.getElementById('cms-frame');
+    const error = document.getElementById('error');
+
+    frame.addEventListener('load', () => {
+      try {
+        // Check if iframe loaded the actual page (not an error)
+        if (frame.contentDocument && frame.contentDocument.body) {
+          frame.style.display = '';
+          error.classList.remove('show');
+        }
+      } catch {
+        // Cross-origin — page loaded fine
+        frame.style.display = '';
+        error.classList.remove('show');
+      }
+    });
+
+    frame.addEventListener('error', () => {
+      frame.style.display = 'none';
+      error.classList.add('show');
+    });
+
+    // Quick health check on load
+    fetch('http://127.0.0.1:41235/health')
+      .catch(() => {
+        frame.style.display = 'none';
+        error.classList.add('show');
+      });
+  </script>
+</body>
+</html>
