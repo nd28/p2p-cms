@@ -1,4 +1,4 @@
-// Detect API base URL — works both when served from the server and from extension
+// Detect API base URL - works both when served from the server and from extension
 const API = window.P2P_CMS_API || window.location.origin;
 
 let items = [];
@@ -311,9 +311,42 @@ async function previewSync(deviceId, deviceName) {
   }
 }
 
+// --- Backup ---
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+async function openBackup() {
+  backupModal.classList.remove("hidden");
+  $("#import-options").classList.add("hidden");
+  $("#git-log").classList.add("hidden");
+
+  try {
+    const status = await api("/api/backup/status");
+    $("#backup-items").textContent = status.itemCount;
+    $("#backup-size").textContent = formatBytes(status.totalSize);
+    $("#backup-git-status").textContent = status.isGit
+      ? status.lastCommit
+        ? "active"
+        : "init"
+      : "off";
+    if (status.remoteUrl) {
+      $("#git-remote").value = status.remoteUrl;
+    }
+  } catch {
+    $("#backup-items").textContent = "-";
+    $("#backup-size").textContent = "-";
+  }
+}
+
 // --- Event listeners ---
 $("#btn-add").addEventListener("click", () => openEditor());
 $("#btn-devices").addEventListener("click", openDevices);
+$("#btn-backup").addEventListener("click", openBackup);
 $("#editor-close").addEventListener("click", closeEditor);
 $("#editor-cancel").addEventListener("click", closeEditor);
 $("#devices-close").addEventListener("click", () =>
@@ -324,6 +357,9 @@ $("#sync-close").addEventListener("click", () =>
 );
 $("#sync-cancel").addEventListener("click", () =>
   syncModal.classList.add("hidden"),
+);
+$("#backup-close").addEventListener("click", () =>
+  backupModal.classList.add("hidden"),
 );
 $("#status-close").addEventListener("click", () =>
   statusBar.classList.add("hidden"),
@@ -380,117 +416,93 @@ $("#remove-image").addEventListener("click", () => {
   fileInput.value = "";
 });
 
-// Close modals on backdrop click
-[editorModal, devicesModal, syncModal, backupModal].forEach((modal) => {
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.classList.add('hidden');
-  });
-});
-
-// Escape key closes modals
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    [editorModal, devicesModal, syncModal, backupModal].forEach((m) => m.classList.add('hidden'));
-  }
-});
-
-// --- Backup ---
-async function openBackup() {
-  backupModal.classList.remove('hidden');
-  $('#import-options').classList.add('hidden');
-  $('#git-log').classList.add('hidden');
-
-  try {
-    const status = await api('/api/backup/status');
-    $('#backup-items').textContent = status.itemCount;
-    $('#backup-size').textContent = formatBytes(status.totalSize);
-    $('#backup-git-status').textContent = status.isGit ? (status.lastCommit ? 'active' : 'init') : 'off';
-    if (status.remoteUrl) {
-      $('#git-remote').value = status.remoteUrl;
-    }
-  } catch {
-    $('#backup-items').textContent = '-';
-    $('#backup-size').textContent = '-';
-  }
-}
-
-function formatBytes(bytes) {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-$('#btn-backup').addEventListener('click', openBackup);
-$('#backup-close').addEventListener('click', () => backupModal.classList.add('hidden'));
-
-$('#btn-export').addEventListener('click', () => {
-  showStatus('Preparing backup download...');
+// Export
+$("#btn-export").addEventListener("click", () => {
+  showStatus("Preparing backup download...");
   window.location.href = `${API}/api/export`;
-  setTimeout(() => showStatus('Backup downloaded'), 1000);
+  setTimeout(() => showStatus("Backup downloaded"), 1000);
 });
 
-$('#import-file').addEventListener('change', () => {
-  if ($('#import-file').files.length) {
-    $('#import-options').classList.remove('hidden');
+// Import
+$("#import-file").addEventListener("change", () => {
+  if ($("#import-file").files.length) {
+    $("#import-options").classList.remove("hidden");
   }
 });
 
-$('#btn-import-confirm').addEventListener('click', async () => {
-  const file = $('#import-file').files[0];
+$("#btn-import-confirm").addEventListener("click", async () => {
+  const file = $("#import-file").files[0];
   if (!file) return;
 
-  const mode = document.querySelector('input[name="import-mode"]:checked').value;
+  const mode = document.querySelector(
+    'input[name="import-mode"]:checked',
+  ).value;
   const formData = new FormData();
-  formData.append('backup', file);
-  formData.append('merge', mode === 'merge' ? 'true' : 'false');
+  formData.append("backup", file);
+  formData.append("merge", mode === "merge" ? "true" : "false");
 
   try {
-    showStatus('Restoring backup...');
-    const res = await fetch(`${API}/api/import`, { method: 'POST', body: formData });
+    showStatus("Restoring backup...");
+    const res = await fetch(`${API}/api/import`, {
+      method: "POST",
+      body: formData,
+    });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error);
 
-    const msg = mode === 'merge'
-      ? `Merged: ${result.itemsAdded} new items added`
-      : `Restored: ${result.itemsRestored} items`;
+    const msg =
+      mode === "merge"
+        ? `Merged: ${result.itemsAdded} new items added`
+        : `Restored: ${result.itemsRestored} items`;
     showStatus(msg);
-    $('#import-options').classList.add('hidden');
-    $('#import-file').value = '';
+    $("#import-options").classList.add("hidden");
+    $("#import-file").value = "";
     await loadItems();
     await openBackup();
   } catch (e) {
-    showStatus('Import failed: ' + e.message, true);
+    showStatus("Import failed: " + e.message, true);
   }
 });
 
-$('#btn-git-backup').addEventListener('click', async () => {
-  const remoteUrl = $('#git-remote').value.trim();
+// Git backup
+$("#btn-git-backup").addEventListener("click", async () => {
+  const remoteUrl = $("#git-remote").value.trim();
   try {
-    showStatus('Running git backup...');
-    const result = await api('/api/backup/git', {
-      method: 'POST',
-      body: JSON.stringify({ remoteUrl: remoteUrl || undefined })
+    showStatus("Running git backup...");
+    const result = await api("/api/backup/git", {
+      method: "POST",
+      body: JSON.stringify({ remoteUrl: remoteUrl || undefined }),
     });
 
     if (result.log) {
-      const logEl = $('#git-log');
-      logEl.classList.remove('hidden');
-      logEl.innerHTML = result.log.map(l => `<div>${escHtml(l)}</div>`).join('');
+      const logEl = $("#git-log");
+      logEl.classList.remove("hidden");
+      logEl.innerHTML = result.log
+        .map((l) => `<div>${escHtml(l)}</div>`)
+        .join("");
     }
 
-    showStatus(result.pushed ? 'Backed up & pushed' : (result.message || 'Backed up locally'));
+    showStatus(
+      result.pushed
+        ? "Backed up & pushed"
+        : result.message || "Backed up locally",
+    );
   } catch (e) {
-    showStatus('Git backup failed: ' + e.message, true);
+    showStatus("Git backup failed: " + e.message, true);
   }
 });
+
+// Close modals on backdrop click
+[editorModal, devicesModal, syncModal, backupModal].forEach((modal) => {
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.classList.add("hidden");
+  });
 });
 
 // Escape key closes modals
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
-    [editorModal, devicesModal, syncModal].forEach((m) =>
+    [editorModal, devicesModal, syncModal, backupModal].forEach((m) =>
       m.classList.add("hidden"),
     );
   }
