@@ -1,22 +1,24 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const os = require('os');
-const DiscoveryService = require('./discovery');
+const express = require("express");
+const cors = require("cors");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const os = require("os");
+const { execSync } = require("child_process");
+const DiscoveryService = require("./discovery");
 
-const PORT = parseInt(process.env.P2P_CMS_PORT || '41235');
-const DATA_DIR = path.join(os.homedir(), '.p2p-cms', 'content');
-const META_FILE = path.join(os.homedir(), '.p2p-cms', 'metadata.json');
-const WEB_DIR = path.join(__dirname, '..', 'web');
+const PORT = parseInt(process.env.P2P_CMS_PORT || "41235");
+const BASE_DIR = path.join(os.homedir(), ".p2p-cms");
+const DATA_DIR = path.join(BASE_DIR, "content");
+const META_FILE = path.join(BASE_DIR, "metadata.json");
+const WEB_DIR = path.join(__dirname, "..", "web");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function loadMeta() {
   try {
-    return JSON.parse(fs.readFileSync(META_FILE, 'utf-8'));
+    return JSON.parse(fs.readFileSync(META_FILE, "utf-8"));
   } catch {
     return { items: [] };
   }
@@ -32,54 +34,54 @@ const upload = multer({
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname);
       cb(null, `${crypto.randomUUID()}${ext}`);
-    }
+    },
   }),
-  limits: { fileSize: 50 * 1024 * 1024 }
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use('/files', express.static(DATA_DIR));
+app.use(express.json({ limit: "10mb" }));
+app.use("/files", express.static(DATA_DIR));
 app.use(express.static(WEB_DIR));
 
-app.get('/health', (req, res) => {
+app.get("/health", (req, res) => {
   res.json({
-    status: 'ok',
+    status: "ok",
     deviceId: discovery.deviceId,
     deviceName: discovery.deviceName,
     localIp: discovery.getLocalIP(),
-    port: PORT
+    port: PORT,
   });
 });
 
-app.get('/api/items', (req, res) => {
+app.get("/api/items", (req, res) => {
   const meta = loadMeta();
   res.json(meta.items);
 });
 
-app.post('/api/items', (req, res) => {
+app.post("/api/items", (req, res) => {
   const meta = loadMeta();
   const item = {
     id: crypto.randomUUID(),
-    title: req.body.title || 'Untitled',
-    type: req.body.type || 'text',
-    content: req.body.content || '',
+    title: req.body.title || "Untitled",
+    type: req.body.type || "text",
+    content: req.body.content || "",
     filePath: req.body.filePath || null,
     originalName: req.body.originalName || null,
     tags: req.body.tags || [],
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
   meta.items.push(item);
   saveMeta(meta);
   res.status(201).json(item);
 });
 
-app.put('/api/items/:id', (req, res) => {
+app.put("/api/items/:id", (req, res) => {
   const meta = loadMeta();
-  const idx = meta.items.findIndex(i => i.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const idx = meta.items.findIndex((i) => i.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "Not found" });
 
   const item = meta.items[idx];
   if (req.body.title !== undefined) item.title = req.body.title;
@@ -93,65 +95,285 @@ app.put('/api/items/:id', (req, res) => {
   res.json(item);
 });
 
-app.delete('/api/items/:id', (req, res) => {
+app.delete("/api/items/:id", (req, res) => {
   const meta = loadMeta();
-  const idx = meta.items.findIndex(i => i.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const idx = meta.items.findIndex((i) => i.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "Not found" });
 
   const [removed] = meta.items.splice(idx, 1);
   if (removed.filePath) {
     const fullPath = path.join(DATA_DIR, removed.filePath);
-    try { fs.unlinkSync(fullPath); } catch {}
+    try {
+      fs.unlinkSync(fullPath);
+    } catch {}
   }
   saveMeta(meta);
   res.json({ success: true });
 });
 
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' });
+// --- Export / Import / Backup ---
+
+app.get("/api/export", (req, res) => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const filename = `p2p-cms-backup-${timestamp}.tar.gz`;
+  const tmpFile = path.join(os.tmpdir(), filename);
+
+  try {
+    execSync(`tar -czf "${tmpFile}" -C "${BASE_DIR}" .`, { stdio: "pipe" });
+    res.download(tmpFile, filename, (err) => {
+      try {
+        fs.unlinkSync(tmpFile);
+      } catch {}
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Export failed: " + e.message });
+  }
+});
+
+const importUpload = multer({
+  dest: os.tmpdir(),
+  limits: { fileSize: 500 * 1024 * 1024 },
+});
+
+app.post("/api/import", importUpload.single("backup"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No backup file" });
+
+  const merge = req.body.merge === "true";
+  const extractDir = path.join(
+    os.tmpdir(),
+    `p2p-cms-import-${crypto.randomUUID()}`,
+  );
+
+  try {
+    fs.mkdirSync(extractDir, { recursive: true });
+    execSync(`tar -xzf "${req.file.path}" -C "${extractDir}"`, {
+      stdio: "pipe",
+    });
+
+    const importedMeta = path.join(extractDir, "metadata.json");
+    if (!fs.existsSync(importedMeta)) {
+      throw new Error("Invalid backup: no metadata.json found");
+    }
+
+    const importedData = JSON.parse(fs.readFileSync(importedMeta, "utf-8"));
+    const importedContentDir = path.join(extractDir, "content");
+
+    if (merge) {
+      const currentMeta = loadMeta();
+      const existingIds = new Set(currentMeta.items.map((i) => i.id));
+      let added = 0;
+
+      for (const item of importedData.items) {
+        if (existingIds.has(item.id)) continue;
+        if (
+          item.filePath &&
+          fs.existsSync(path.join(importedContentDir, item.filePath))
+        ) {
+          fs.copyFileSync(
+            path.join(importedContentDir, item.filePath),
+            path.join(DATA_DIR, item.filePath),
+          );
+        }
+        currentMeta.items.push(item);
+        added++;
+      }
+      saveMeta(currentMeta);
+      res.json({
+        success: true,
+        mode: "merge",
+        itemsAdded: added,
+        totalItems: currentMeta.items.length,
+      });
+    } else {
+      // Full replace
+      if (fs.existsSync(DATA_DIR)) {
+        fs.rmSync(DATA_DIR, { recursive: true });
+      }
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+
+      if (fs.existsSync(importedContentDir)) {
+        const files = fs.readdirSync(importedContentDir);
+        for (const file of files) {
+          fs.copyFileSync(
+            path.join(importedContentDir, file),
+            path.join(DATA_DIR, file),
+          );
+        }
+      }
+
+      saveMeta(importedData);
+      res.json({
+        success: true,
+        mode: "replace",
+        itemsRestored: importedData.items.length,
+      });
+    }
+  } catch (e) {
+    res.status(500).json({ error: "Import failed: " + e.message });
+  } finally {
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch {}
+    try {
+      fs.rmSync(extractDir, { recursive: true });
+    } catch {}
+  }
+});
+
+app.post("/api/backup/git", (req, res) => {
+  const remoteUrl = req.body.remoteUrl;
+  const commitMsg = req.body.commitMsg || `Backup ${new Date().toISOString()}`;
+
+  try {
+    // Init git repo if not exists
+    if (!fs.existsSync(path.join(BASE_DIR, ".git"))) {
+      execSync("git init", { cwd: BASE_DIR, stdio: "pipe" });
+      execSync("git checkout -b main", { cwd: BASE_DIR, stdio: "pipe" });
+    }
+
+    // Add and commit
+    execSync("git add -A", { cwd: BASE_DIR, stdio: "pipe" });
+
+    try {
+      execSync(`git commit -m "${commitMsg}"`, {
+        cwd: BASE_DIR,
+        stdio: "pipe",
+      });
+    } catch {
+      // No changes to commit
+      return res.json({
+        success: true,
+        message: "No changes to backup",
+        pushed: false,
+      });
+    }
+
+    let pushed = false;
+    if (remoteUrl) {
+      try {
+        execSync("git remote remove origin", { cwd: BASE_DIR, stdio: "pipe" });
+      } catch {}
+      execSync(`git remote add origin "${remoteUrl}"`, {
+        cwd: BASE_DIR,
+        stdio: "pipe",
+      });
+      execSync("git push -u origin main", { cwd: BASE_DIR, stdio: "pipe" });
+      pushed = true;
+    } else {
+      // Check if origin exists
+      try {
+        execSync("git remote get-url origin", { cwd: BASE_DIR, stdio: "pipe" });
+        execSync("git push origin main", { cwd: BASE_DIR, stdio: "pipe" });
+        pushed = true;
+      } catch {}
+    }
+
+    // Get log
+    const log = execSync("git log --oneline -5", {
+      cwd: BASE_DIR,
+      stdio: "pipe",
+    })
+      .toString()
+      .trim();
+    res.json({
+      success: true,
+      message: commitMsg,
+      pushed,
+      log: log.split("\n"),
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Git backup failed: " + e.message });
+  }
+});
+
+app.get("/api/backup/status", (req, res) => {
+  const isGit = fs.existsSync(path.join(BASE_DIR, ".git"));
+  let remoteUrl = null;
+  let lastCommit = null;
+  let itemCount = 0;
+  let totalSize = 0;
+
+  try {
+    const meta = loadMeta();
+    itemCount = meta.items.length;
+
+    if (fs.existsSync(DATA_DIR)) {
+      const files = fs.readdirSync(DATA_DIR);
+      for (const f of files) {
+        try {
+          totalSize += fs.statSync(path.join(DATA_DIR, f)).size;
+        } catch {}
+      }
+    }
+
+    if (isGit) {
+      try {
+        remoteUrl = execSync("git remote get-url origin", {
+          cwd: BASE_DIR,
+          stdio: "pipe",
+        })
+          .toString()
+          .trim();
+      } catch {}
+      try {
+        lastCommit = execSync('git log -1 --format="%h %s (%ar)"', {
+          cwd: BASE_DIR,
+          stdio: "pipe",
+        })
+          .toString()
+          .trim();
+      } catch {}
+    }
+  } catch {}
+
+  res.json({ isGit, remoteUrl, lastCommit, itemCount, totalSize });
+});
+
+app.post("/api/upload", upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
 
   const meta = loadMeta();
   const item = {
     id: crypto.randomUUID(),
     title: req.body.title || req.file.originalname,
-    type: req.file.mimetype.startsWith('image/') ? 'image' : 'file',
-    content: '',
+    type: req.file.mimetype.startsWith("image/") ? "image" : "file",
+    content: "",
     filePath: req.file.filename,
     originalName: req.file.originalname,
     mimeType: req.file.mimetype,
     fileSize: req.file.size,
     tags: req.body.tags ? JSON.parse(req.body.tags) : [],
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
   meta.items.push(item);
   saveMeta(meta);
   res.status(201).json(item);
 });
 
-app.get('/api/devices', (req, res) => {
+app.get("/api/devices", (req, res) => {
   res.json(discovery.getPeers());
 });
 
-app.get('/api/sync/:deviceId', (req, res) => {
-  const peer = discovery.getPeers().find(p => p.id === req.params.deviceId);
-  if (!peer) return res.status(404).json({ error: 'Device not found' });
+app.get("/api/sync/:deviceId", (req, res) => {
+  const peer = discovery.getPeers().find((p) => p.id === req.params.deviceId);
+  if (!peer) return res.status(404).json({ error: "Device not found" });
 
   const meta = loadMeta();
   res.json({
     device: { id: discovery.deviceId, name: discovery.deviceName },
-    items: meta.items.map(item => ({
+    items: meta.items.map((item) => ({
       ...item,
       fileUrl: item.filePath
         ? `http://${discovery.getLocalIP()}:${PORT}/files/${item.filePath}`
-        : null
-    }))
+        : null,
+    })),
   });
 });
 
-app.get('/api/preview/:deviceId', async (req, res) => {
-  const peer = discovery.getPeers().find(p => p.id === req.params.deviceId);
-  if (!peer) return res.status(404).json({ error: 'Device not found' });
+app.get("/api/preview/:deviceId", async (req, res) => {
+  const peer = discovery.getPeers().find((p) => p.id === req.params.deviceId);
+  if (!peer) return res.status(404).json({ error: "Device not found" });
   try {
     const response = await fetch(`http://${peer.ip}:${peer.port}/api/items`);
     const items = await response.json();
@@ -161,15 +383,17 @@ app.get('/api/preview/:deviceId', async (req, res) => {
   }
 });
 
-app.post('/api/pull/:deviceId', async (req, res) => {
-  const peer = discovery.getPeers().find(p => p.id === req.params.deviceId);
-  if (!peer) return res.status(404).json({ error: 'Device not found' });
+app.post("/api/pull/:deviceId", async (req, res) => {
+  const peer = discovery.getPeers().find((p) => p.id === req.params.deviceId);
+  if (!peer) return res.status(404).json({ error: "Device not found" });
 
   try {
-    const response = await fetch(`http://${peer.ip}:${peer.port}/api/sync/${discovery.deviceId}`);
+    const response = await fetch(
+      `http://${peer.ip}:${peer.port}/api/sync/${discovery.deviceId}`,
+    );
     const remoteData = await response.json();
     const meta = loadMeta();
-    const existingIds = new Set(meta.items.map(i => i.id));
+    const existingIds = new Set(meta.items.map((i) => i.id));
     let added = 0;
 
     for (const item of remoteData.items) {
@@ -178,13 +402,13 @@ app.post('/api/pull/:deviceId', async (req, res) => {
       if (item.fileUrl) {
         try {
           const fileResp = await fetch(item.fileUrl);
-          const ext = path.extname(item.originalName || 'file');
+          const ext = path.extname(item.originalName || "file");
           const filename = `${crypto.randomUUID()}${ext}`;
           const buffer = Buffer.from(await fileResp.arrayBuffer());
           fs.writeFileSync(path.join(DATA_DIR, filename), buffer);
           item.filePath = filename;
         } catch (e) {
-          console.error('[Sync] Failed to download file:', e.message);
+          console.error("[Sync] Failed to download file:", e.message);
         }
       }
       delete item.fileUrl;
@@ -193,7 +417,11 @@ app.post('/api/pull/:deviceId', async (req, res) => {
     }
 
     saveMeta(meta);
-    res.json({ success: true, itemsAdded: added, deviceName: remoteData.device.name });
+    res.json({
+      success: true,
+      itemsAdded: added,
+      deviceName: remoteData.device.name,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -201,17 +429,19 @@ app.post('/api/pull/:deviceId', async (req, res) => {
 
 const discovery = new DiscoveryService(PORT, process.env.P2P_CMS_NAME);
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   const ip = discovery.getLocalIP();
   console.log(`[P2P-CMS] Server running on http://0.0.0.0:${PORT}`);
-  console.log(`[P2P-CMS] Device: ${discovery.deviceName} (${discovery.deviceId})`);
+  console.log(
+    `[P2P-CMS] Device: ${discovery.deviceName} (${discovery.deviceId})`,
+  );
   console.log(`[P2P-CMS] Open on this device: http://localhost:${PORT}`);
   console.log(`[P2P-CMS] Open from phone/other device: http://${ip}:${PORT}`);
   console.log(`[P2P-CMS] Data dir: ${DATA_DIR}`);
   discovery.start();
 });
 
-process.on('SIGINT', () => {
+process.on("SIGINT", () => {
   discovery.stop();
   process.exit(0);
 });

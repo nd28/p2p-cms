@@ -1,107 +1,181 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>P2P CMS</title>
-  <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-  <div id="app">
-    <header>
-      <div class="header-left">
-        <h1>P2P CMS</h1>
-        <span id="device-label" class="device-label"></span>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>P2P CMS</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="header-left">
+          <h1>P2P CMS</h1>
+          <span id="device-label" class="device-label"></span>
+        </div>
+        <div class="header-actions">
+          <button id="btn-backup" class="icon-btn" title="Backup & Export">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </button>
+          <button id="btn-devices" class="icon-btn" title="Devices">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+          </button>
+          <button id="btn-add" class="icon-btn primary" title="New Content">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="status-bar" class="status-bar hidden">
+        <span id="status-text"></span>
+        <button id="status-close" class="close-btn">&times;</button>
       </div>
-      <div class="header-actions">
-        <button id="btn-devices" class="icon-btn" title="Devices">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+
+      <main id="main-content">
+        <div id="content-list" class="content-list"></div>
+        <div id="empty-state" class="empty-state hidden">
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            opacity="0.4"
+          >
+            <path
+              d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+            />
+            <polyline points="14 2 14 8 20 8" />
           </svg>
-        </button>
-        <button id="btn-add" class="icon-btn primary" title="New Content">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <div id="status-bar" class="status-bar hidden">
-      <span id="status-text"></span>
-      <button id="status-close" class="close-btn">&times;</button>
-    </div>
-
-    <main id="main-content">
-      <div id="content-list" class="content-list"></div>
-      <div id="empty-state" class="empty-state hidden">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <p>No content yet</p>
-        <p class="sub">Click + to create your first item</p>
-      </div>
-    </main>
-
-    <!-- Editor Modal -->
-    <div id="editor-modal" class="modal hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2 id="editor-title">New Content</h2>
-          <button id="editor-close" class="close-btn">&times;</button>
+          <p>No content yet</p>
+          <p class="sub">Click + to create your first item</p>
         </div>
-        <form id="editor-form">
-          <input type="hidden" id="edit-id">
-          <div class="form-group">
-            <input type="text" id="edit-title" placeholder="Title" required>
-          </div>
-          <div class="form-group">
-            <div class="type-tabs">
-              <button type="button" class="type-tab active" data-type="text">Text</button>
-              <button type="button" class="type-tab" data-type="image">Image</button>
-            </div>
-          </div>
-          <div id="text-editor" class="form-group">
-            <textarea id="edit-content" placeholder="Write your content..." rows="8"></textarea>
-          </div>
-          <div id="image-editor" class="form-group hidden">
-            <div class="file-drop" id="file-drop">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5">
-                <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <p>Drop image or click to browse</p>
-              <input type="file" id="edit-file" accept="image/*" hidden>
-            </div>
-            <div id="image-preview" class="image-preview hidden">
-              <img id="preview-img" alt="Preview">
-              <button type="button" id="remove-image" class="remove-btn">&times;</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <input type="text" id="edit-tags" placeholder="Tags (comma separated)">
-          </div>
-          <div class="form-actions">
-            <button type="button" id="editor-cancel" class="btn btn-secondary">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </main>
 
-    <!-- Devices Modal -->
-    <div id="devices-modal" class="modal hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Devices on Network</h2>
-          <button id="devices-close" class="close-btn">&times;</button>
-        </div>
-        <div id="devices-list" class="devices-list"></div>
-        <div id="no-devices" class="empty-state hidden">
-          <p>No devices found</p>
-          <p class="sub">Make sure P2P CMS server is running on other devices</p>
+      <!-- Editor Modal -->
+      <div id="editor-modal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="editor-title">New Content</h2>
+            <button id="editor-close" class="close-btn">&times;</button>
+          </div>
+          <form id="editor-form">
+            <input type="hidden" id="edit-id" />
+            <div class="form-group">
+              <input type="text" id="edit-title" placeholder="Title" required />
+            </div>
+            <div class="form-group">
+              <div class="type-tabs">
+                <button type="button" class="type-tab active" data-type="text">
+                  Text
+                </button>
+                <button type="button" class="type-tab" data-type="image">
+                  Image
+                </button>
+              </div>
+            </div>
+            <div id="text-editor" class="form-group">
+              <textarea
+                id="edit-content"
+                placeholder="Write your content..."
+                rows="8"
+              ></textarea>
+            </div>
+            <div id="image-editor" class="form-group hidden">
+              <div class="file-drop" id="file-drop">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  opacity="0.5"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+                <p>Drop image or click to browse</p>
+                <input type="file" id="edit-file" accept="image/*" hidden />
+              </div>
+              <div id="image-preview" class="image-preview hidden">
+                <img id="preview-img" alt="Preview" />
+                <button type="button" id="remove-image" class="remove-btn">
+                  &times;
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <input
+                type="text"
+                id="edit-tags"
+                placeholder="Tags (comma separated)"
+              />
+            </div>
+            <div class="form-actions">
+              <button
+                type="button"
+                id="editor-cancel"
+                class="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
         </div>
       </div>
-    </div>
+
+      <!-- Devices Modal -->
+      <div id="devices-modal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Devices on Network</h2>
+            <button id="devices-close" class="close-btn">&times;</button>
+          </div>
+          <div id="devices-list" class="devices-list"></div>
+          <div id="no-devices" class="empty-state hidden">
+            <p>No devices found</p>
+            <p class="sub">
+              Make sure P2P CMS server is running on other devices
+            </p>
+          </div>
+        </div>
+      </div>
 
     <!-- Sync Modal -->
     <div id="sync-modal" class="modal hidden">
@@ -117,7 +191,81 @@
         </div>
       </div>
     </div>
-  </div>
-  <script src="/app.js"></script>
-</body>
+
+    <!-- Backup Modal -->
+    <div id="backup-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Backup & Export</h2>
+          <button id="backup-close" class="close-btn">&times;</button>
+        </div>
+
+        <div id="backup-info" class="backup-info">
+          <div class="backup-stat">
+            <span class="backup-stat-value" id="backup-items">-</span>
+            <span class="backup-stat-label">items</span>
+          </div>
+          <div class="backup-stat">
+            <span class="backup-stat-value" id="backup-size">-</span>
+            <span class="backup-stat-label">files size</span>
+          </div>
+          <div class="backup-stat">
+            <span class="backup-stat-value" id="backup-git-status">-</span>
+            <span class="backup-stat-label">git backup</span>
+          </div>
+        </div>
+
+        <div class="backup-section">
+          <h3>Export / Import</h3>
+          <p class="backup-desc">Download everything as a single file. Store it anywhere — USB, cloud, email to yourself.</p>
+          <div class="backup-actions">
+            <button id="btn-export" class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download Backup
+            </button>
+            <label class="btn btn-secondary" id="btn-import-label">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Restore from Backup
+              <input type="file" id="import-file" accept=".tar.gz,.gz" hidden>
+            </label>
+          </div>
+          <div id="import-options" class="import-options hidden">
+            <label class="radio-option">
+              <input type="radio" name="import-mode" value="merge" checked>
+              <span><strong>Merge</strong> — add new items, keep existing</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="import-mode" value="replace">
+              <span><strong>Replace</strong> — overwrite everything with backup</span>
+            </label>
+            <button id="btn-import-confirm" class="btn btn-primary">Restore</button>
+          </div>
+        </div>
+
+        <div class="backup-section">
+          <h3>Git Backup (version controlled)</h3>
+          <p class="backup-desc">Auto-commit to a private git repo. Full history of every change.</p>
+          <div class="form-group">
+            <input type="text" id="git-remote" placeholder="GitHub private repo URL (optional)">
+          </div>
+          <button id="btn-git-backup" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>
+            Git Backup Now
+          </button>
+          <div id="git-log" class="git-log hidden"></div>
+        </div>
+      </div>
+    </div>
+          <div id="sync-preview" class="sync-preview"></div>
+          <div class="form-actions">
+            <button id="sync-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="sync-confirm" class="btn btn-primary">
+              Pull Content
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="/app.js"></script>
+  </body>
 </html>
